@@ -2,7 +2,7 @@ import os
 import logging
 import requests
 from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 # Configure logging
 logging.basicConfig(
@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Bot Configuration - using environment variables for security
+# Bot Configuration
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4')
 HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN', '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')
 
@@ -30,7 +30,7 @@ def query_huggingface(payload):
         logger.error(f"Hugging Face API error: {e}")
         return {"error": str(e)}
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update: Update, context: CallbackContext):
     """Handle incoming messages and generate AI responses"""
     user_message = update.message.text
     
@@ -40,7 +40,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Show typing action
-        await update.message.chat.send_action(action="typing")
+        context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
         
         # Generate AI response using Hugging Face
         output = query_huggingface({
@@ -70,13 +70,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(ai_response) > 4000:
             ai_response = ai_response[:4000] + "..."
             
-        await update.message.reply_text(ai_response)
+        update.message.reply_text(ai_response)
         
     except Exception as e:
         logger.error(f"Error generating response: {e}")
-        await update.message.reply_text("Sorry, I encountered an error. Please try again.")
+        update.message.reply_text("Sorry, I encountered an error. Please try again.")
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start_command(update: Update, context: CallbackContext):
     """Handle the /start command"""
     welcome_text = """
 🤖 **Hello! I'm your AI Assistant Bot**
@@ -91,9 +91,9 @@ Just send me a message and I'll respond using AI technology!
 
 **Note:** The AI might take 10-20 seconds to warm up when first starting.
     """
-    await update.message.reply_text(welcome_text)
+    update.message.reply_text(welcome_text)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def help_command(update: Update, context: CallbackContext):
     """Handle the /help command"""
     help_text = """
 📖 **How to use this bot:**
@@ -110,34 +110,41 @@ Simply send me any message or question, and I'll respond using AI!
 /start - Start the bot
 /help - Show this help message
     """
-    await update.message.reply_text(help_text)
+    update.message.reply_text(help_text)
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def error_handler(update: Update, context: CallbackContext):
     """Handle errors"""
     logger.error(f"Update {update} caused error {context.error}")
     
     if update and update.message:
-        await update.message.reply_text("Sorry, something went wrong. Please try again later.")
+        update.message.reply_text("Sorry, something went wrong. Please try again later.")
 
 def main():
     """Start the bot"""
-    # Create application
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    # Create updater with your bot token
+    updater = Updater(TELEGRAM_TOKEN, use_context=True)
+    
+    # Get dispatcher to register handlers
+    dp = updater.dispatcher
     
     # Add handlers
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.Command("start"), start_command))
-    application.add_handler(MessageHandler(filters.Command("help"), help_command))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    dp.add_handler(CommandHandler("start", start_command))
+    dp.add_handler(CommandHandler("help", help_command))
     
     # Add error handler
-    application.add_error_handler(error_handler)
+    dp.add_error_handler(error_handler)
     
     # Start the bot
     logger.info("🤖 Bot is starting...")
     logger.info("✅ Using Hugging Face API")
     logger.info("🚀 Bot is running...")
     
-    application.run_polling()
+    # Start polling
+    updater.start_polling()
+    
+    # Run the bot until you press Ctrl-C
+    updater.idle()
 
 if __name__ == '__main__':
     main()
