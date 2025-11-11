@@ -1,8 +1,7 @@
 import os
 import logging
-import requests
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import random
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 # Configure logging
 logging.basicConfig(
@@ -11,139 +10,90 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Bot Configuration
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4')
-HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN', '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')
 
-# Hugging Face API configuration
-API_URL = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-large"
-headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
+# Simple AI responses
+RESPONSES = {
+    "hello": ["Hello! 👋", "Hi there!", "Hey! How can I help you?"],
+    "how are you": ["I'm doing great! 😊", "I'm fine, thank you!", "All systems operational! 🤖"],
+    "what is your name": ["I'm your AI assistant bot!", "I'm a helpful bot created to assist you!"],
+    "thank you": ["You're welcome! 😊", "Happy to help!", "Anytime! 👍"],
+    "help": ["I can answer questions and chat with you! Try asking me anything."],
+    "default": [
+        "That's an interesting question!",
+        "I'm still learning about that topic.",
+        "Could you tell me more about that?",
+        "I'd be happy to help with that!",
+        "Let me think about that...",
+        "That's a great question!",
+    ]
+}
 
-def query_huggingface(payload):
-    """Query Hugging Face API for AI response"""
-    try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        if response.status_code == 503:
-            return {"error": "Model is loading, please try again in a few seconds"}
-        return response.json()
-    except Exception as e:
-        logger.error(f"Hugging Face API error: {e}")
-        return {"error": str(e)}
+def get_ai_response(message):
+    """Generate a response based on the user's message"""
+    message_lower = message.lower()
+    
+    for key, responses in RESPONSES.items():
+        if key in message_lower and key != "default":
+            return random.choice(responses)
+    
+    return random.choice(RESPONSES["default"])
 
-def handle_message(update: Update, context: CallbackContext):
-    """Handle incoming messages and generate AI responses"""
+def handle_message(update, context):
+    """Handle incoming messages"""
     user_message = update.message.text
     
-    # Don't respond to commands or empty messages
-    if user_message.startswith('/') or not user_message.strip():
+    if user_message.startswith('/'):
         return
     
-    try:
-        # Show typing action
-        context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-        
-        # Generate AI response using Hugging Face
-        output = query_huggingface({
-            "inputs": user_message,
-            "parameters": {
-                "max_length": 300,
-                "temperature": 0.7,
-                "do_sample": True,
-                "pad_token_id": 50256
-            }
-        })
-        
-        if output and 'error' in output:
-            ai_response = "🔄 The AI model is warming up. Please try again in 10-20 seconds!"
-        elif output and isinstance(output, list) and len(output) > 0:
-            if 'generated_text' in output[0]:
-                ai_response = output[0]['generated_text']
-            else:
-                ai_response = "I received a response but cannot display it properly."
-        else:
-            ai_response = "Hello! I'm your AI assistant. How can I help you today?"
-        
-        # Clean response
-        ai_response = str(ai_response).strip()
-        
-        # Limit response length for Telegram
-        if len(ai_response) > 4000:
-            ai_response = ai_response[:4000] + "..."
-            
-        update.message.reply_text(ai_response)
-        
-    except Exception as e:
-        logger.error(f"Error generating response: {e}")
-        update.message.reply_text("Sorry, I encountered an error. Please try again.")
+    # Show typing action
+    context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    
+    # Get AI response
+    ai_response = get_ai_response(user_message)
+    
+    update.message.reply_text(ai_response)
 
-def start_command(update: Update, context: CallbackContext):
-    """Handle the /start command"""
+def start(update, context):
+    """Send a message when the command /start is issued."""
     welcome_text = """
-🤖 **Hello! I'm your AI Assistant Bot**
+🤖 Hello! I'm your AI Assistant Bot
 
-I'm powered by Hugging Face's AI models and can help you with:
+I can help you with:
 • Answering questions
 • Having conversations
 • Providing information
-• Creative writing
 
-Just send me a message and I'll respond using AI technology!
-
-**Note:** The AI might take 10-20 seconds to warm up when first starting.
+Just send me a message and I'll respond!
     """
     update.message.reply_text(welcome_text)
 
-def help_command(update: Update, context: CallbackContext):
-    """Handle the /help command"""
-    help_text = """
-📖 **How to use this bot:**
-
-Simply send me any message or question, and I'll respond using AI!
-
-**Examples:**
-• "What is the capital of France?"
-• "Explain machine learning"
-• "Write a short poem about nature"
-• "Tell me a joke"
-
-**Commands:**
-/start - Start the bot
-/help - Show this help message
-    """
+def help_command(update, context):
+    """Send a message when the command /help is issued."""
+    help_text = "Just send me any message and I'll respond with an AI-generated answer!"
     update.message.reply_text(help_text)
 
-def error_handler(update: Update, context: CallbackContext):
-    """Handle errors"""
-    logger.error(f"Update {update} caused error {context.error}")
-    
-    if update and update.message:
-        update.message.reply_text("Sorry, something went wrong. Please try again later.")
-
 def main():
-    """Start the bot"""
-    # Create updater with your bot token
+    """Start the bot."""
+    # Create the Updater and pass it your bot's token.
     updater = Updater(TELEGRAM_TOKEN, use_context=True)
-    
-    # Get dispatcher to register handlers
+
+    # Get the dispatcher to register handlers
     dp = updater.dispatcher
-    
-    # Add handlers
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    dp.add_handler(CommandHandler("start", start_command))
+
+    # on different commands - answer in Telegram
+    dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("help", help_command))
-    
-    # Add error handler
-    dp.add_error_handler(error_handler)
-    
-    # Start the bot
-    logger.info("🤖 Bot is starting...")
-    logger.info("✅ Using Hugging Face API")
-    logger.info("🚀 Bot is running...")
-    
-    # Start polling
+
+    # on noncommand i.e message - echo the message on Telegram
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+
+    # Start the Bot
     updater.start_polling()
-    
-    # Run the bot until you press Ctrl-C
+
+    # Run the bot until you press Ctrl-C or the process receives SIGINT,
+    # SIGTERM or SIGABRT. This should be used most of the time, since
+    # start_polling() is non-blocking and will stop the bot gracefully.
     updater.idle()
 
 if __name__ == '__main__':
