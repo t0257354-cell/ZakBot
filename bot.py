@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = "8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4"
-HF_TOKEN = "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"
+HF_TOKEN = "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"
 
 app = Flask(__name__)
 
