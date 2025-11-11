@@ -7,8 +7,9 @@ from flask import Flask, request, jsonify
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4"
-HF_TOKEN = "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"
+# Get tokens from environment variables
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
+HF_TOKEN = os.environ.get('HF_TOKEN')
 
 app = Flask(__name__)
 
@@ -17,7 +18,7 @@ class HuggingFaceAI:
         self.api_url = "https://router.huggingface.co/hf-inference/models/microsoft/DialoGPT-medium"
     
     def generate_response(self, user_message):
-        """Генерируем уникальный ответ через Hugging Face API"""
+        """Generate response through Hugging Face API"""
         try:
             headers = {"Authorization": f"Bearer {HF_TOKEN}"}
             
@@ -27,7 +28,7 @@ class HuggingFaceAI:
 
 Юмористический ответ:"""
             
-            logger.info("🔄 Генерируем ответ через Hugging Face...")
+            logger.info("🔄 Generating response through Hugging Face...")
             
             response = requests.post(
                 self.api_url,
@@ -45,62 +46,55 @@ class HuggingFaceAI:
                 timeout=30
             )
             
-            logger.info(f"📡 Статус Hugging Face: {response.status_code}")
+            logger.info(f"📡 Hugging Face status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"📦 Ответ API получен")
                 
                 if isinstance(result, list) and len(result) > 0:
                     generated_text = result[0].get('generated_text', '')
-                    logger.info(f"📝 Сгенерированный текст: {generated_text[:100]}...")
                     
-                    # Извлекаем только ответ после промпта
+                    # Extract only the response after prompt
                     response_text = generated_text.replace(prompt, '').strip()
                     
-                    # Очищаем ответ
+                    # Clean up response
                     response_text = re.sub(r'^[^а-яА-Я]*', '', response_text)
                     
                     if response_text and len(response_text) > 15:
-                        logger.info(f"✅ Успешная генерация: {response_text}")
+                        logger.info(f"✅ Successful generation: {response_text}")
                         return response_text
             
             elif response.status_code == 503:
-                logger.warning("⏳ Модель загружается...")
+                logger.warning("⏳ Model is loading...")
             else:
-                logger.error(f"❌ Ошибка API: {response.status_code} - {response.text}")
+                logger.error(f"❌ API Error: {response.status_code}")
                 
         except Exception as e:
-            logger.error(f"🔥 Ошибка генерации: {e}")
+            logger.error(f"🔥 Generation error: {e}")
         
         return None
 
-# Инициализация AI
+# Initialize AI
 ai = HuggingFaceAI()
 
 def contains_kazak(text):
-    """Проверяет слово 'казак'"""
     if not text or not isinstance(text, str):
         return False
     pattern = r'\b[Кк]аза[кч]\w*\b'
     return bool(re.search(pattern, text, re.IGNORECASE))
 
 def send_message(chat_id, text):
-    """Отправка сообщения"""
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         data = {"chat_id": chat_id, "text": text}
         response = requests.post(url, json=data, timeout=10)
         if response.status_code == 200:
-            logger.info(f"✅ Отправлен ответ: {text}")
-        else:
-            logger.error(f"❌ Ошибка отправки: {response.status_code}")
+            logger.info(f"✅ Sent response: {text}")
     except Exception as e:
-        logger.error(f"Ошибка отправки: {e}")
+        logger.error(f"Send error: {e}")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    """Обработчик вебхука"""
     try:
         update = request.get_json()
         
@@ -111,72 +105,70 @@ def webhook():
         chat_id = message['chat']['id']
         user_message = message['text']
         
-        # Игнорируем сообщения от ботов
         if 'from' in message and message['from'].get('is_bot', False):
             return jsonify({'status': 'ok'})
         
-        # Реагируем на "казак"
         if contains_kazak(user_message):
-            logger.info(f"🎯 Найдено слово 'казак': {user_message}")
+            logger.info(f"🎯 Found 'kazak': {user_message}")
             
-            # Пытаемся сгенерировать ответ
             response = ai.generate_response(user_message)
             
-            # Если генерация удалась - отправляем, иначе молчим
             if response:
                 send_message(chat_id, response)
             else:
-                logger.info("🤐 Генерация не удалась - молчим")
+                logger.info("🤐 Generation failed - staying silent")
         
         return jsonify({'status': 'ok'})
             
     except Exception as e:
-        logger.error(f"Ошибка вебхука: {e}")
+        logger.error(f"Webhook error: {e}")
         return jsonify({'status': 'error'}), 500
 
 @app.route('/')
 def home():
-    return "🎭 Бот с генерацией через Hugging Face"
+    return "🎭 Bot with Hugging Face generation"
 
 @app.route('/test')
 def test_generation():
-    """Тест генерации ответа"""
     test_message = "привет казак"
     response = ai.generate_response(test_message)
     
     if response:
-        status = "✅ Успешная генерация"
+        status = "✅ Successful generation"
     else:
-        status = "❌ Генерация не удалась"
+        status = "❌ Generation failed"
     
     return f"""
     <html>
         <body style="font-family: Arial; padding: 20px;">
-            <h1>Тест генерации Hugging Face</h1>
-            <p><strong>Сообщение:</strong> {test_message}</p>
-            <p><strong>Статус:</strong> {status}</p>
-            <p><strong>Ответ:</strong> {response if response else 'Нет ответа'}</p>
-            <p><a href="/">На главную</a></p>
+            <h1>Hugging Face Generation Test</h1>
+            <p><strong>Message:</strong> {test_message}</p>
+            <p><strong>Status:</strong> {status}</p>
+            <p><strong>Response:</strong> {response if response else 'No response'}</p>
+            <p><a href="/">Home</a></p>
         </body>
     </html>
     """
 
 def set_webhook():
-    """Установка вебхука"""
     try:
         render_url = os.environ.get('RENDER_EXTERNAL_URL')
         if render_url:
             webhook_url = f"{render_url}/webhook"
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
-            response = requests.post(url, json={"url": webhook_url})
-            if response.status_code == 200:
-                logger.info(f"✅ Вебхук установлен: {webhook_url}")
+            requests.post(url, json={"url": webhook_url})
+            logger.info(f"✅ Webhook set: {webhook_url}")
     except Exception as e:
-        logger.error(f"Ошибка установки вебхука: {e}")
+        logger.error(f"Webhook setup error: {e}")
 
 if __name__ == '__main__':
+    # Check if tokens are set
+    if not BOT_TOKEN:
+        logger.error("❌ BOT_TOKEN environment variable not set!")
+    if not HF_TOKEN:
+        logger.error("❌ HF_TOKEN environment variable not set!")
+    
     set_webhook()
     port = int(os.environ.get('PORT', 10000))
-    logger.info("🎭 Бот с реальной генерацией через Hugging Face запущен!")
-    logger.info("🌐 Откройте /test для проверки генерации")
+    logger.info("🎭 Bot with environment variables started!")
     app.run(host='0.0.0.0', port=port)
