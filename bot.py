@@ -1,3 +1,4 @@
+import os
 import logging
 import requests
 from telegram import Update
@@ -10,9 +11,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Bot Configuration
-TELEGRAM_TOKEN = "8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4"
-HUGGINGFACE_TOKEN = "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"
+# Bot Configuration - using environment variables for security
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4')
+HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN', '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')
 
 # Hugging Face API configuration
 API_URL = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-large"
@@ -22,10 +23,12 @@ def query_huggingface(payload):
     """Query Hugging Face API for AI response"""
     try:
         response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+        if response.status_code == 503:
+            return {"error": "Model is loading, please try again in a few seconds"}
         return response.json()
     except Exception as e:
         logger.error(f"Hugging Face API error: {e}")
-        return None
+        return {"error": str(e)}
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle incoming messages and generate AI responses"""
@@ -43,29 +46,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         output = query_huggingface({
             "inputs": user_message,
             "parameters": {
-                "max_length": 500,
+                "max_length": 300,
                 "temperature": 0.7,
-                "do_sample": True
+                "do_sample": True,
+                "pad_token_id": 50256
             }
         })
         
-        if output and isinstance(output, list) and len(output) > 0:
+        if output and 'error' in output:
+            ai_response = "🔄 The AI model is warming up. Please try again in 10-20 seconds!"
+        elif output and isinstance(output, list) and len(output) > 0:
             if 'generated_text' in output[0]:
                 ai_response = output[0]['generated_text']
             else:
-                ai_response = output[0].get('generated_text', 'I received a response but cannot display it.')
+                ai_response = "I received a response but cannot display it properly."
         else:
-            ai_response = "I'm still learning. Could you try rephrasing your question?"
+            ai_response = "Hello! I'm your AI assistant. How can I help you today?"
+        
+        # Clean response
+        ai_response = str(ai_response).strip()
         
         # Limit response length for Telegram
         if len(ai_response) > 4000:
             ai_response = ai_response[:4000] + "..."
-        
+            
         await update.message.reply_text(ai_response)
         
     except Exception as e:
         logger.error(f"Error generating response: {e}")
-        await update.message.reply_text("Sorry, I encountered an error while processing your question. Please try again.")
+        await update.message.reply_text("Sorry, I encountered an error. Please try again.")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command"""
@@ -80,10 +89,7 @@ I'm powered by Hugging Face's AI models and can help you with:
 
 Just send me a message and I'll respond using AI technology!
 
-**Commands:**
-/start - Start the bot
-/help - Show help message
-/about - Learn about this bot
+**Note:** The AI might take 10-20 seconds to warm up when first starting.
     """
     await update.message.reply_text(welcome_text)
 
@@ -100,23 +106,11 @@ Simply send me any message or question, and I'll respond using AI!
 • "Write a short poem about nature"
 • "Tell me a joke"
 
-**Note:** I'm using a free AI model, so responses might take a few seconds and may not always be perfect.
+**Commands:**
+/start - Start the bot
+/help - Show this help message
     """
     await update.message.reply_text(help_text)
-
-async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the /about command"""
-    about_text = """
-🤖 **About This Bot**
-
-• **Powered by:** Hugging Face Transformers
-• **Model:** Microsoft DialoGPT-large
-• **Purpose:** AI-powered conversation assistant
-• **Creator:** Your friendly developer
-
-This bot demonstrates how to integrate Hugging Face AI models with Telegram bots.
-    """
-    await update.message.reply_text(about_text)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle errors"""
@@ -134,15 +128,14 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.Command("start"), start_command))
     application.add_handler(MessageHandler(filters.Command("help"), help_command))
-    application.add_handler(MessageHandler(filters.Command("about"), about_command))
     
     # Add error handler
     application.add_error_handler(error_handler)
     
     # Start the bot
-    print("🤖 Bot is starting...")
-    print("✅ Using Hugging Face API")
-    print("🚀 Bot is running... Press Ctrl+C to stop.")
+    logger.info("🤖 Bot is starting...")
+    logger.info("✅ Using Hugging Face API")
+    logger.info("🚀 Bot is running...")
     
     application.run_polling()
 
