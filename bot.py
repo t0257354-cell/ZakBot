@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = "8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4"
-HF_TOKEN = "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"
+HF_TOKEN = "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"
 
 app = Flask(__name__)
 
@@ -17,7 +17,7 @@ class HuggingFaceAI:
         self.api_url = "https://router.huggingface.co/hf-inference/models/microsoft/DialoGPT-medium"
     
     def generate_response(self, user_message):
-        """Генерируем уникальный ответ через новый Hugging Face API"""
+        """Генерируем уникальный ответ через Hugging Face API"""
         try:
             headers = {"Authorization": f"Bearer {HF_TOKEN}"}
             
@@ -27,7 +27,7 @@ class HuggingFaceAI:
 
 Юмористический ответ:"""
             
-            logger.info("🔄 Генерируем ответ через новый Hugging Face API...")
+            logger.info("🔄 Генерируем ответ через Hugging Face...")
             
             response = requests.post(
                 self.api_url,
@@ -49,11 +49,11 @@ class HuggingFaceAI:
             
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"📦 Полный ответ API: {result}")
+                logger.info(f"📦 Ответ API получен")
                 
                 if isinstance(result, list) and len(result) > 0:
                     generated_text = result[0].get('generated_text', '')
-                    logger.info(f"📝 Сгенерированный текст: {generated_text}")
+                    logger.info(f"📝 Сгенерированный текст: {generated_text[:100]}...")
                     
                     # Извлекаем только ответ после промпта
                     response_text = generated_text.replace(prompt, '').strip()
@@ -64,20 +64,16 @@ class HuggingFaceAI:
                     if response_text and len(response_text) > 15:
                         logger.info(f"✅ Успешная генерация: {response_text}")
                         return response_text
-                    else:
-                        logger.warning("❌ Ответ слишком короткий")
-                        return None
             
             elif response.status_code == 503:
                 logger.warning("⏳ Модель загружается...")
-                return None
             else:
                 logger.error(f"❌ Ошибка API: {response.status_code} - {response.text}")
-                return None
                 
         except Exception as e:
             logger.error(f"🔥 Ошибка генерации: {e}")
-            return None
+        
+        return None
 
 # Инициализация AI
 ai = HuggingFaceAI()
@@ -96,7 +92,7 @@ def send_message(chat_id, text):
         data = {"chat_id": chat_id, "text": text}
         response = requests.post(url, json=data, timeout=10)
         if response.status_code == 200:
-            logger.info(f"✅ Отправлен сгенерированный ответ: {text}")
+            logger.info(f"✅ Отправлен ответ: {text}")
         else:
             logger.error(f"❌ Ошибка отправки: {response.status_code}")
     except Exception as e:
