@@ -14,10 +14,10 @@ app = Flask(__name__)
 
 class HuggingFaceAI:
     def __init__(self):
-        self.api_url = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
+        self.api_url = "https://router.huggingface.co/hf-inference/models/microsoft/DialoGPT-medium"
     
     def generate_response(self, user_message):
-        """Генерируем уникальный ответ через Hugging Face API"""
+        """Генерируем уникальный ответ через новый Hugging Face API"""
         try:
             headers = {"Authorization": f"Bearer {HF_TOKEN}"}
             
@@ -27,7 +27,7 @@ class HuggingFaceAI:
 
 Юмористический ответ:"""
             
-            logger.info("🔄 Генерируем ответ через Hugging Face...")
+            logger.info("🔄 Генерируем ответ через новый Hugging Face API...")
             
             response = requests.post(
                 self.api_url,
@@ -40,9 +40,6 @@ class HuggingFaceAI:
                         "do_sample": True,
                         "top_p": 0.9,
                         "repetition_penalty": 1.2
-                    },
-                    "options": {
-                        "wait_for_model": True
                     }
                 },
                 timeout=30
