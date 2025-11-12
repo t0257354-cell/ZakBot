@@ -1,15 +1,22 @@
 import os
 import requests
 import random
-from telegram import Update
+from flask import Flask, request
+from telegram import Bot, Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
-# Токен бота Telegram из environment переменной
+# Токены из environment переменных
 BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
-
-# Токен OpenRouter API для DeepSeek из environment переменной
 OPENROUTER_API_KEY = os.environ.get('DS_TOKEN', '')
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')
+
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+app = Flask(__name__)
+
+# Инициализируем бота
+bot = Bot(token=BOT_TOKEN)
+application = Application.builder().token(BOT_TOKEN).build()
 
 async def get_deepseek_response(message_text):
     """Получает ответ от DeepSeek через OpenRouter API"""
@@ -43,10 +50,8 @@ async def get_deepseek_response(message_text):
     try:
         response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=15)
         response.raise_for_status()
-        
         result = response.json()
         return result['choices'][0]['message']['content'].strip()
-        
     except Exception as e:
         print(f"Ошибка при обращении к API: {e}")
         return None
@@ -62,7 +67,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if ai_response:
                 await update.message.reply_text(ai_response)
             else:
-                # Фолбэк ответы если API не работает
                 fallback_responses = [
                     "мефк! 🐾", 
                     "хррррр...", 
@@ -75,35 +79,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 await update.message.reply_text(random.choice(fallback_responses))
 
-def main():
-    """Основная функция запуска бота"""
-    if not BOT_TOKEN:
-        print("Ошибка: Токен Telegram бота не установлен!")
-        print("Пожалуйста, установите переменную окружения BOT_TOKEN")
-        return
-    
-    print("Проверка токенов...")
-    print(f"BOT_TOKEN установлен: {'Да' if BOT_TOKEN else 'Нет'}")
-    print(f"DS_TOKEN установлен: {'Да' if OPENROUTER_API_KEY else 'Нет'}")
-    
-    try:
-        # Создаем приложение
-        application = Application.builder().token(BOT_TOKEN).build()
-        
-        # Добавляем обработчик сообщений
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        
-        # Запускаем бота
-        print("Бот запущен и слушает сообщения с словом 'Шмыг'...")
-        print("Используется DeepSeek через OpenRouter API")
-        application.run_polling()
-        
-    except Exception as e:
-        print(f"Ошибка при запуске бота: {e}")
-        print("Возможные причины:")
-        print("1. Неверный токен бота")
-        print("2. Проблемы с сетью")
-        print("3. Несовместимая версия библиотеки")
+# Добавляем обработчик в приложение
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-if __name__ == "__main__":
-    main()
+@app.route('/')
+def home():
+    return "Бот работает! 🐱"
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    """Эндпоинт для вебхука от Telegram"""
+    if request.method == 'POST':
+        update = Update.de_json(request.get_json(force=True), bot)
+        application.update_queue.put(update)
+    return 'ok'
+
+@app.route('/set_webhook', methods=['GET'])
+def set_webhook():
+    """Установка вебхука"""
+    if not RENDER_EXTERNAL_HOSTNAME:
+        return "RENDER_EXTERNAL_HOSTNAME не установлен"
+    
+    webhook_url = f"https://{RENDER_EXTERNAL_HOSTNAME}/webhook"
+    result = bot.set_webhook(webhook_url)
+    if result:
+        return f"Вебхук установлен: {webhook_url}"
+    else:
+        return "Ошибка установки вебхука"
+
+if __name__ == '__main__':
+    # Запускаем Flask приложение
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
