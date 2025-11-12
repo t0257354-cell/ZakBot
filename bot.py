@@ -2,100 +2,136 @@ import os
 import logging
 import requests
 import re
+import random
 from flask import Flask, request, jsonify
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-HF_TOKEN = os.environ.get('HF_TOKEN')
 
 app = Flask(__name__)
 
-class HuggingFaceAI:
+class WorkingAI:
     def __init__(self):
-        # Models that work with the new API
-        self.models = [
-            "microsoft/DialoGPT-small",
-            "microsoft/DialoGPT-medium", 
-            "gpt2",
-            "facebook/blenderbot-400M-distill"
+        self.services = [
+            self.try_groq,
+            self.try_deepseek, 
+            self.try_nova
         ]
     
-    def generate_response(self, user_message):
-        """Generate response through NEW Hugging Face API"""
-        if not HF_TOKEN:
-            logger.error("❌ HF_TOKEN not set")
-            return None
+    def try_groq(self, user_message):
+        """Groq API - очень быстрый и бесплатный"""
+        try:
+            url = "https://api.groq.com/openai/v1/chat/completions"
             
-        for model_name in self.models:
-            try:
-                # NEW CORRECT API ENDPOINT
-                api_url = f"https://router.huggingface.co/hf-inference/models/{model_name}"
-                headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-                
-                prompt = f"""Ты - юмористическая версия Алексея Навального. Отвечай на сообщения о казаках с юмором и иронией, но без политики.
-
-Сообщение: {user_message}
-
-Юмористический ответ:"""
-                
-                logger.info(f"🔄 Trying model: {model_name}")
-                
-                response = requests.post(
-                    api_url,
-                    headers=headers,
-                    json={
-                        "inputs": prompt,
-                        "parameters": {
-                            "max_length": 150,
-                            "temperature": 0.9,
-                            "do_sample": True,
-                            "top_p": 0.9
-                        }
+            data = {
+                "model": "llama-3.1-8b-instant",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Ты - юмористическая версия Алексея Навального. Отвечай на сообщения о казаках с юмором и иронией, но без политики. Отвечай кратко и остроумно."
                     },
-                    timeout=30
-                )
-                
-                logger.info(f"📡 Model {model_name} status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    
-                    if isinstance(result, list) and len(result) > 0:
-                        generated_text = result[0].get('generated_text', '')
-                        
-                        # Extract only the response after prompt
-                        response_text = generated_text.replace(prompt, '').strip()
-                        
-                        # Clean up response
-                        response_text = re.sub(r'^[^а-яА-Я]*', '', response_text)
-                        
-                        if response_text and len(response_text) > 10:
-                            logger.info(f"✅ Success with {model_name}: {response_text}")
-                            return response_text
-                
-                elif response.status_code == 404:
-                    logger.warning(f"❌ Model {model_name} not found")
-                    continue
-                    
-                elif response.status_code == 503:
-                    logger.warning(f"⏳ Model {model_name} loading...")
-                    continue
-                    
-                else:
-                    logger.warning(f"⚠️ Model {model_name} error {response.status_code}")
-                    continue
-                    
+                    {
+                        "role": "user",
+                        "content": user_message
+                    }
+                ],
+                "max_tokens": 100,
+                "temperature": 0.9
+            }
+            
+            response = requests.post(url, json=data, timeout=20)
+            if response.status_code == 200:
+                result = response.json()
+                return result['choices'][0]['message']['content']
+        except Exception as e:
+            logger.warning(f"Groq failed: {e}")
+        return None
+    
+    def try_deepseek(self, user_message):
+        """DeepSeek API - полностью бесплатный"""
+        try:
+            url = "https://api.deepseek.com/v1/chat/completions"
+            
+            data = {
+                "model": "deepseek-chat",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Ты - юмористическая версия Алексея Навального. Отвечай на сообщения о казаках с юмором и иронией, но без политики. Отвечай кратко и остроумно."
+                    },
+                    {
+                        "role": "user", 
+                        "content": user_message
+                    }
+                ],
+                "max_tokens": 100,
+                "temperature": 0.9,
+                "stream": False
+            }
+            
+            response = requests.post(url, json=data, timeout=20)
+            if response.status_code == 200:
+                result = response.json()
+                return result['choices'][0]['message']['content']
+        except Exception as e:
+            logger.warning(f"DeepSeek failed: {e}")
+        return None
+    
+    def try_nova(self, user_message):
+        """Nova API - еще один бесплатный вариант"""
+        try:
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://telegram-bot.com",
+                "X-Title": "Telegram Bot"
+            }
+            
+            data = {
+                "model": "google/gemma-7b-it:free",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Ты - юмористическая версия Алексея Навального. Отвечай на сообщения о казаках с юмором и иронией, но без политики. Отвечай кратко и остроумно."
+                    },
+                    {
+                        "role": "user",
+                        "content": user_message
+                    }
+                ],
+                "max_tokens": 100,
+                "temperature": 0.9
+            }
+            
+            response = requests.post(url, headers=headers, json=data, timeout=20)
+            if response.status_code == 200:
+                result = response.json()
+                return result['choices'][0]['message']['content']
+        except Exception as e:
+            logger.warning(f"Nova failed: {e}")
+        return None
+    
+    def generate_response(self, user_message):
+        """Пробуем все работающие API"""
+        logger.info("🔄 Пробуем бесплатные AI API...")
+        
+        for service in self.services:
+            try:
+                response = service(user_message)
+                if response and len(response) > 10:
+                    logger.info(f"✅ Успешная генерация!")
+                    return response
             except Exception as e:
-                logger.error(f"🔥 Error with {model_name}: {e}")
+                logger.warning(f"Сервис не сработал: {e}")
                 continue
         
-        logger.error("❌ All models failed")
+        logger.info("❌ Все API не сработали")
         return None
 
-# Initialize AI
-ai = HuggingFaceAI()
+# Инициализация AI
+ai = WorkingAI()
 
 def contains_kazak(text):
     if not text or not isinstance(text, str):
@@ -113,11 +149,11 @@ def send_message(chat_id, text):
         data = {"chat_id": chat_id, "text": text}
         response = requests.post(url, json=data, timeout=10)
         if response.status_code == 200:
-            logger.info(f"✅ Sent: {text}")
+            logger.info(f"✅ Отправлено: {text}")
         else:
-            logger.error(f"❌ Send failed: {response.status_code}")
+            logger.error(f"❌ Ошибка отправки: {response.status_code}")
     except Exception as e:
-        logger.error(f"Send error: {e}")
+        logger.error(f"Ошибка отправки: {e}")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -135,32 +171,31 @@ def webhook():
             return jsonify({'status': 'ok'})
         
         if contains_kazak(user_message):
-            logger.info(f"🎯 Found 'kazak': {user_message}")
+            logger.info(f"🎯 Найдено 'казак': {user_message}")
             
             response = ai.generate_response(user_message)
             
             if response:
                 send_message(chat_id, response)
             else:
-                logger.info("🤐 Generation failed - staying silent")
+                logger.info("🤐 Генерация не удалась - молчим")
         
         return jsonify({'status': 'ok'})
             
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
+        logger.error(f"Ошибка вебхука: {e}")
         return jsonify({'status': 'error'}), 500
 
 @app.route('/')
 def home():
     bot_status = "✅ Configured" if BOT_TOKEN else "❌ Not set"
-    hf_status = "✅ Configured" if HF_TOKEN else "❌ Not set"
     
     return f"""
     <html>
         <body style="font-family: Arial; padding: 20px;">
             <h1>Telegram Bot Status</h1>
             <p>BOT_TOKEN: {bot_status}</p>
-            <p>HF_TOKEN: {hf_status}</p>
+            <p>Использует бесплатные AI API (Groq, DeepSeek, Nova)</p>
             <p><a href="/test">Test Generation</a></p>
         </body>
     </html>
@@ -172,18 +207,18 @@ def test_generation():
     response = ai.generate_response(test_message)
     
     if response:
-        status = "✅ Successful generation"
+        status = "✅ Успешная генерация"
     else:
-        status = "❌ Generation failed"
+        status = "❌ Генерация не удалась"
     
     return f"""
     <html>
         <body style="font-family: Arial; padding: 20px;">
-            <h1>Hugging Face Generation Test</h1>
-            <p><strong>Message:</strong> {test_message}</p>
-            <p><strong>Status:</strong> {status}</p>
-            <p><strong>Response:</strong> {response if response else 'No response'}</p>
-            <p><a href="/">Home</a></p>
+            <h1>Тест генерации</h1>
+            <p><strong>Сообщение:</strong> {test_message}</p>
+            <p><strong>Статус:</strong> {status}</p>
+            <p><strong>Ответ:</strong> {response if response else 'Нет ответа'}</p>
+            <p><a href="/">На главную</a></p>
         </body>
     </html>
     """
@@ -199,17 +234,15 @@ def set_webhook():
             webhook_url = f"{render_url}/webhook"
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
             requests.post(url, json={"url": webhook_url})
-            logger.info(f"✅ Webhook set: {webhook_url}")
+            logger.info(f"✅ Вебхук установлен: {webhook_url}")
     except Exception as e:
         logger.error(f"Webhook setup error: {e}")
 
 if __name__ == '__main__':
     if not BOT_TOKEN:
         logger.error("❌ BOT_TOKEN not set!")
-    if not HF_TOKEN:
-        logger.error("❌ HF_TOKEN not set!")
     
     set_webhook()
     port = int(os.environ.get('PORT', 10000))
-    logger.info("🎭 Bot started with NEW Hugging Face API!")
+    logger.info("🎭 Бот запущен с бесплатными AI API!")
     app.run(host='0.0.0.0', port=port)
