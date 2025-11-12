@@ -1,7 +1,6 @@
-import os
 import logging
 from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from groq import Groq
 
 # Set up logging
@@ -11,15 +10,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get environment variables
-TELEGRAM_BOT_TOKEN = os.environ.get('BOT_TOKEN')
-GROQ_API_KEY = os.environ.get('GROK_TOKEN')
-
-# Validate environment variables
-if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("BOT_TOKEN environment variable is required")
-if not GROQ_API_KEY:
-    raise ValueError("GROK_TOKEN environment variable is required")
+# Hardcoded tokens (replace with your actual tokens)
+TELEGRAM_BOT_TOKEN = "8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4"
+GROQ_API_KEY = "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"
 
 # Initialize Groq client
 groq_client = Groq(api_key=GROQ_API_KEY)
@@ -49,7 +42,7 @@ def generate_groq_response(user_message: str) -> str:
         logger.error(f"Groq API error: {e}")
         return "Не удалось сгенерировать ответ в данный момент."
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update: Update, context: CallbackContext):
     """Handle incoming messages and respond if they contain 'Путин'"""
     
     # Ignore messages without text
@@ -68,39 +61,44 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response = generate_groq_response(message_text)
             
             # Send the response
-            await update.message.reply_text(response)
+            update.message.reply_text(response)
             
         except Exception as e:
             logger.error(f"Error processing message: {e}")
-            await update.message.reply_text("Извините, произошла ошибка при обработке сообщения.")
+            update.message.reply_text("Извините, произошла ошибка при обработке сообщения.")
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def error_handler(update: Update, context: CallbackContext):
     """Handle errors in the bot"""
     logger.error(f"Exception while handling an update: {context.error}")
 
 def main():
     """Start the bot"""
-    # Create application
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # Create updater with your bot token
+    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
+    
+    # Get the dispatcher to register handlers
+    dispatcher = updater.dispatcher
     
     # Add message handler
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, 
+    dispatcher.add_handler(MessageHandler(
+        Filters.text & ~Filters.command, 
         handle_message
     ))
     
     # Add error handler
-    application.add_error_handler(error_handler)
+    dispatcher.add_error_handler(error_handler)
     
     # Start the bot
     logger.info("Bot is starting...")
-    print("Bot is running on Render!")
+    print("✅ Bot is running with hardcoded tokens!")
+    print(f"🤖 Bot token: {TELEGRAM_BOT_TOKEN[:10]}...")
+    print(f"🔑 Groq token: {GROQ_API_KEY[:10]}...")
     
     # Start polling
-    application.run_polling(
-        drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES
-    )
+    updater.start_polling(drop_pending_updates=True)
+    
+    # Run the bot until you press Ctrl-C
+    updater.idle()
 
 if __name__ == "__main__":
     main()
