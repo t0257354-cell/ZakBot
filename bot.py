@@ -3,13 +3,11 @@ import logging
 import requests
 import re
 from flask import Flask, request, jsonify
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Get tokens from environment variables (Render automatically provides these)
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 HF_TOKEN = os.environ.get('HF_TOKEN')
 
@@ -17,7 +15,7 @@ app = Flask(__name__)
 
 class HuggingFaceAI:
     def __init__(self):
-        # Use a model that definitely exists and works
+        # Use models that definitely exist and work
         self.models = [
             "microsoft/DialoGPT-small",    # Small and fast
             "microsoft/DialoGPT-medium",   # Medium size
@@ -216,10 +214,11 @@ def set_webhook():
         logger.error(f"Webhook setup error: {e}")
 
 if __name__ == '__main__':
+    # Check if tokens are set
     if not BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN not set!")
+        logger.error("❌ BOT_TOKEN environment variable not set!")
     if not HF_TOKEN:
-        logger.error("❌ HF_TOKEN not set!")
+        logger.error("❌ HF_TOKEN environment variable not set!")
     
     set_webhook()
     port = int(os.environ.get('PORT', 10000))
