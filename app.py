@@ -1,6 +1,7 @@
+import os
 import logging
 from telegram import Update
-from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from groq import Groq
 
 # Set up logging
@@ -42,7 +43,7 @@ def generate_groq_response(user_message: str) -> str:
         logger.error(f"Groq API error: {e}")
         return "Не удалось сгенерировать ответ в данный момент."
 
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle incoming messages and respond if they contain 'Путин'"""
     
     # Ignore messages without text
@@ -61,32 +62,29 @@ def handle_message(update: Update, context: CallbackContext):
             response = generate_groq_response(message_text)
             
             # Send the response
-            update.message.reply_text(response)
+            await update.message.reply_text(response)
             
         except Exception as e:
             logger.error(f"Error processing message: {e}")
-            update.message.reply_text("Извините, произошла ошибка при обработке сообщения.")
+            await update.message.reply_text("Извините, произошла ошибка при обработке сообщения.")
 
-def error_handler(update: Update, context: CallbackContext):
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle errors in the bot"""
     logger.error(f"Exception while handling an update: {context.error}")
 
 def main():
     """Start the bot"""
-    # Create updater with your bot token
-    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
-    
-    # Get the dispatcher to register handlers
-    dispatcher = updater.dispatcher
+    # Create application
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     # Add message handler
-    dispatcher.add_handler(MessageHandler(
-        Filters.text & ~Filters.command, 
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, 
         handle_message
     ))
     
     # Add error handler
-    dispatcher.add_error_handler(error_handler)
+    application.add_error_handler(error_handler)
     
     # Start the bot
     logger.info("Bot is starting...")
@@ -95,10 +93,10 @@ def main():
     print(f"🔑 Groq token: {GROQ_API_KEY[:10]}...")
     
     # Start polling
-    updater.start_polling(drop_pending_updates=True)
-    
-    # Run the bot until you press Ctrl-C
-    updater.idle()
+    application.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES
+    )
 
 if __name__ == "__main__":
     main()
