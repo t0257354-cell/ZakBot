@@ -7,7 +7,6 @@ from flask import Flask, request, jsonify
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Get tokens from environment variables (Render automatically provides these)
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 HF_TOKEN = os.environ.get('HF_TOKEN')
 
@@ -15,27 +14,24 @@ app = Flask(__name__)
 
 class HuggingFaceAI:
     def __init__(self):
-        # Use models that definitely exist and work
+        # Models that work with the new API
         self.models = [
-            "microsoft/DialoGPT-small",    # Small and fast
-            "microsoft/DialoGPT-medium",   # Medium size
-            "gpt2",                        # Always available
-            "facebook/blenderbot-400M-distill"  # Chat model
+            "microsoft/DialoGPT-small",
+            "microsoft/DialoGPT-medium", 
+            "gpt2",
+            "facebook/blenderbot-400M-distill"
         ]
-        self.current_model = 0
     
     def generate_response(self, user_message):
-        """Generate response through Hugging Face API"""
+        """Generate response through NEW Hugging Face API"""
         if not HF_TOKEN:
             logger.error("❌ HF_TOKEN not set")
             return None
             
-        # Try all models until one works
-        for i in range(len(self.models)):
-            model_name = self.models[self.current_model]
-            
+        for model_name in self.models:
             try:
-                api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+                # NEW CORRECT API ENDPOINT
+                api_url = f"https://router.huggingface.co/hf-inference/models/{model_name}"
                 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
                 
                 prompt = f"""Ты - юмористическая версия Алексея Навального. Отвечай на сообщения о казаках с юмором и иронией, но без политики.
@@ -80,24 +76,19 @@ class HuggingFaceAI:
                             return response_text
                 
                 elif response.status_code == 404:
-                    logger.warning(f"❌ Model {model_name} not found, trying next...")
-                    self.current_model = (self.current_model + 1) % len(self.models)
+                    logger.warning(f"❌ Model {model_name} not found")
                     continue
                     
                 elif response.status_code == 503:
                     logger.warning(f"⏳ Model {model_name} loading...")
-                    # Try next model
-                    self.current_model = (self.current_model + 1) % len(self.models)
                     continue
                     
                 else:
-                    logger.warning(f"⚠️ Model {model_name} error {response.status_code}, trying next...")
-                    self.current_model = (self.current_model + 1) % len(self.models)
+                    logger.warning(f"⚠️ Model {model_name} error {response.status_code}")
                     continue
                     
             except Exception as e:
                 logger.error(f"🔥 Error with {model_name}: {e}")
-                self.current_model = (self.current_model + 1) % len(self.models)
                 continue
         
         logger.error("❌ All models failed")
@@ -170,7 +161,6 @@ def home():
             <h1>Telegram Bot Status</h1>
             <p>BOT_TOKEN: {bot_status}</p>
             <p>HF_TOKEN: {hf_status}</p>
-            <p>Current model: {ai.models[ai.current_model] if ai.models else 'None'}</p>
             <p><a href="/test">Test Generation</a></p>
         </body>
     </html>
@@ -214,13 +204,12 @@ def set_webhook():
         logger.error(f"Webhook setup error: {e}")
 
 if __name__ == '__main__':
-    # Check if tokens are set
     if not BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN environment variable not set!")
+        logger.error("❌ BOT_TOKEN not set!")
     if not HF_TOKEN:
-        logger.error("❌ HF_TOKEN environment variable not set!")
+        logger.error("❌ HF_TOKEN not set!")
     
     set_webhook()
     port = int(os.environ.get('PORT', 10000))
-    logger.info("🎭 Bot started with multiple model fallbacks!")
+    logger.info("🎭 Bot started with NEW Hugging Face API!")
     app.run(host='0.0.0.0', port=port)
