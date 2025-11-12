@@ -1,6 +1,5 @@
 import os
 import logging
-import asyncio
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from groq import Groq
@@ -24,31 +23,6 @@ if not GROQ_API_KEY:
 
 # Initialize Groq client
 groq_client = Groq(api_key=GROQ_API_KEY)
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle incoming messages and respond if they contain 'Путин'"""
-    
-    # Ignore messages without text
-    if not update.message or not update.message.text:
-        return
-    
-    message_text = update.message.text
-    chat_id = update.message.chat_id
-    
-    # Check if message contains the target word (case insensitive)
-    if 'путин' in message_text.lower():
-        try:
-            logger.info(f"Detected 'Путин' in message from chat {chat_id}")
-            
-            # Generate response using Groq
-            response = generate_groq_response(message_text)
-            
-            # Send the response
-            await update.message.reply_text(response)
-            
-        except Exception as e:
-            logger.error(f"Error processing message: {e}")
-            await update.message.reply_text("Извините, произошла ошибка при обработке сообщения.")
 
 def generate_groq_response(user_message: str) -> str:
     """Generate a response using Groq API"""
@@ -75,6 +49,31 @@ def generate_groq_response(user_message: str) -> str:
         logger.error(f"Groq API error: {e}")
         return "Не удалось сгенерировать ответ в данный момент."
 
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle incoming messages and respond if they contain 'Путин'"""
+    
+    # Ignore messages without text
+    if not update.message or not update.message.text:
+        return
+    
+    message_text = update.message.text
+    chat_id = update.message.chat_id
+    
+    # Check if message contains the target word (case insensitive)
+    if 'путин' in message_text.lower():
+        try:
+            logger.info(f"Detected 'Путин' in message from chat {chat_id}")
+            
+            # Generate response using Groq
+            response = generate_groq_response(message_text)
+            
+            # Send the response
+            await update.message.reply_text(response)
+            
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
+            await update.message.reply_text("Извините, произошла ошибка при обработке сообщения.")
+
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle errors in the bot"""
     logger.error(f"Exception while handling an update: {context.error}")
@@ -96,7 +95,12 @@ def main():
     # Start the bot
     logger.info("Bot is starting...")
     print("Bot is running on Render!")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    
+    # Start polling
+    application.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES
+    )
 
 if __name__ == "__main__":
     main()
