@@ -2,7 +2,6 @@ import os
 import logging
 import requests
 import re
-import random
 from flask import Flask, request, jsonify
 
 logging.basicConfig(level=logging.INFO)
@@ -12,134 +11,78 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
 app = Flask(__name__)
 
-class WorkingAI:
+class GroqAI:
     def __init__(self):
-        self.services = [
-            self.try_groq,
-            self.try_deepseek, 
-            self.try_nova
-        ]
+        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
+        # Бесплатный API, не требует ключа
     
-    def try_groq(self, user_message):
-        """Groq API - очень быстрый и бесплатный"""
+    def generate_response(self, user_message):
+        """Генерируем ответ через Groq API"""
         try:
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            
             data = {
-                "model": "llama-3.1-8b-instant",
+                "model": "llama-3.1-8b-instant",  # Быстрая и бесплатная модель
                 "messages": [
                     {
                         "role": "system",
-                        "content": "Ты - юмористическая версия Алексея Навального. Отвечай на сообщения о казаках с юмором и иронией, но без политики. Отвечай кратко и остроумно."
+                        "content": """Ты - юмористическая версия Алексея Навального. 
+Отвечай на сообщения о казаках с юмором и иронией, но без политики. 
+Будь остроумным, саркастичным и дружелюбным. 
+Отвечай кратко (1-2 предложения) в разговорном стиле."""
                     },
                     {
                         "role": "user",
-                        "content": user_message
-                    }
-                ],
-                "max_tokens": 100,
-                "temperature": 0.9
-            }
-            
-            response = requests.post(url, json=data, timeout=20)
-            if response.status_code == 200:
-                result = response.json()
-                return result['choices'][0]['message']['content']
-        except Exception as e:
-            logger.warning(f"Groq failed: {e}")
-        return None
-    
-    def try_deepseek(self, user_message):
-        """DeepSeek API - полностью бесплатный"""
-        try:
-            url = "https://api.deepseek.com/v1/chat/completions"
-            
-            data = {
-                "model": "deepseek-chat",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "Ты - юмористическая версия Алексея Навального. Отвечай на сообщения о казаках с юмором и иронией, но без политики. Отвечай кратко и остроумно."
-                    },
-                    {
-                        "role": "user", 
                         "content": user_message
                     }
                 ],
                 "max_tokens": 100,
                 "temperature": 0.9,
-                "stream": False
+                "top_p": 0.9
             }
             
-            response = requests.post(url, json=data, timeout=20)
+            logger.info("🔄 Генерируем ответ через Groq...")
+            
+            response = requests.post(
+                self.api_url,
+                json=data,
+                timeout=20
+            )
+            
+            logger.info(f"📡 Groq status: {response.status_code}")
+            
             if response.status_code == 200:
                 result = response.json()
-                return result['choices'][0]['message']['content']
+                response_text = result['choices'][0]['message']['content'].strip()
+                
+                if response_text and len(response_text) > 10:
+                    logger.info(f"✅ Успешная генерация: {response_text}")
+                    return response_text
+                else:
+                    logger.warning("❌ Ответ слишком короткий")
+                    return None
+                    
+            elif response.status_code == 429:
+                logger.warning("⏳ Rate limit, waiting...")
+                return None
+            else:
+                logger.error(f"❌ Groq error: {response.status_code} - {response.text}")
+                return None
+                
         except Exception as e:
-            logger.warning(f"DeepSeek failed: {e}")
-        return None
-    
-    def try_nova(self, user_message):
-        """Nova API - еще один бесплатный вариант"""
-        try:
-            url = "https://openrouter.ai/api/v1/chat/completions"
-            headers = {
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://telegram-bot.com",
-                "X-Title": "Telegram Bot"
-            }
-            
-            data = {
-                "model": "google/gemma-7b-it:free",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "Ты - юмористическая версия Алексея Навального. Отвечай на сообщения о казаках с юмором и иронией, но без политики. Отвечай кратко и остроумно."
-                    },
-                    {
-                        "role": "user",
-                        "content": user_message
-                    }
-                ],
-                "max_tokens": 100,
-                "temperature": 0.9
-            }
-            
-            response = requests.post(url, headers=headers, json=data, timeout=20)
-            if response.status_code == 200:
-                result = response.json()
-                return result['choices'][0]['message']['content']
-        except Exception as e:
-            logger.warning(f"Nova failed: {e}")
-        return None
-    
-    def generate_response(self, user_message):
-        """Пробуем все работающие API"""
-        logger.info("🔄 Пробуем бесплатные AI API...")
-        
-        for service in self.services:
-            try:
-                response = service(user_message)
-                if response and len(response) > 10:
-                    logger.info(f"✅ Успешная генерация!")
-                    return response
-            except Exception as e:
-                logger.warning(f"Сервис не сработал: {e}")
-                continue
-        
-        logger.info("❌ Все API не сработали")
-        return None
+            logger.error(f"🔥 Groq error: {e}")
+            return None
 
 # Инициализация AI
-ai = WorkingAI()
+ai = GroqAI()
 
 def contains_kazak(text):
+    """Проверяет слово 'казак'"""
     if not text or not isinstance(text, str):
         return False
     pattern = r'\b[Кк]аза[кч]\w*\b'
     return bool(re.search(pattern, text, re.IGNORECASE))
 
 def send_message(chat_id, text):
+    """Отправка сообщения"""
     if not BOT_TOKEN:
         logger.error("❌ BOT_TOKEN not set")
         return
@@ -157,6 +100,7 @@ def send_message(chat_id, text):
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    """Обработчик вебхука"""
     try:
         update = request.get_json()
         
@@ -167,14 +111,18 @@ def webhook():
         chat_id = message['chat']['id']
         user_message = message['text']
         
+        # Игнорируем сообщения от ботов
         if 'from' in message and message['from'].get('is_bot', False):
             return jsonify({'status': 'ok'})
         
+        # Реагируем на "казак"
         if contains_kazak(user_message):
             logger.info(f"🎯 Найдено 'казак': {user_message}")
             
+            # Пытаемся сгенерировать ответ
             response = ai.generate_response(user_message)
             
+            # Если генерация удалась - отправляем, иначе молчим
             if response:
                 send_message(chat_id, response)
             else:
@@ -193,9 +141,9 @@ def home():
     return f"""
     <html>
         <body style="font-family: Arial; padding: 20px;">
-            <h1>Telegram Bot Status</h1>
+            <h1>Telegram Bot with Groq AI</h1>
             <p>BOT_TOKEN: {bot_status}</p>
-            <p>Использует бесплатные AI API (Groq, DeepSeek, Nova)</p>
+            <p>Использует Groq API (бесплатный и быстрый)</p>
             <p><a href="/test">Test Generation</a></p>
         </body>
     </html>
@@ -203,6 +151,7 @@ def home():
 
 @app.route('/test')
 def test_generation():
+    """Тест генерации ответа"""
     test_message = "привет казак"
     response = ai.generate_response(test_message)
     
@@ -214,7 +163,7 @@ def test_generation():
     return f"""
     <html>
         <body style="font-family: Arial; padding: 20px;">
-            <h1>Тест генерации</h1>
+            <h1>Тест генерации Groq</h1>
             <p><strong>Сообщение:</strong> {test_message}</p>
             <p><strong>Статус:</strong> {status}</p>
             <p><strong>Ответ:</strong> {response if response else 'Нет ответа'}</p>
@@ -224,6 +173,7 @@ def test_generation():
     """
 
 def set_webhook():
+    """Установка вебхука"""
     if not BOT_TOKEN:
         logger.error("❌ Cannot set webhook - BOT_TOKEN not set")
         return
@@ -244,5 +194,5 @@ if __name__ == '__main__':
     
     set_webhook()
     port = int(os.environ.get('PORT', 10000))
-    logger.info("🎭 Бот запущен с бесплатными AI API!")
+    logger.info("🎭 Бот запущен с Groq AI!")
     app.run(host='0.0.0.0', port=port)
