@@ -1,105 +1,109 @@
 import os
-import logging
+import requests
+import json
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from groq import Groq
 
-# Set up logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# Токен бота Telegram из environment переменной
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
 
-# Hardcoded tokens
-TELEGRAM_BOT_TOKEN = "8326410603:AAHeqICzU7ASRkr0xyDgmxP0a0ah2j4JMN4"
-GROQ_API_KEY = "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"
+# Токен OpenRouter API для DeepSeek из environment переменной
+OPENROUTER_API_KEY = os.environ.get('DS_TOKEN', '')
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Initialize Groq client
-try:
-    groq_client = Groq(api_key=GROQ_API_KEY)
-    logger.info("Groq client initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize Groq client: {e}")
-    groq_client = None
-
-def generate_groq_response(user_message: str) -> str:
-    """Generate a response using Groq API"""
+async def get_deepseek_response(message_text):
+    """Получает ответ от DeepSeek через OpenRouter API"""
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com",  # Обязательный заголовок для OpenRouter
+        "X-Title": "Telegram Cat Bot"  # Название приложения
+    }
     
-    if not groq_client:
-        return "Сервис временно недоступен."
+    payload = {
+        "model": "deepseek/deepseek-chat",  # Модель через OpenRouter
+        "messages": [
+            {
+                "role": "system",
+                "content": "Ты игривый кот. Отвечай очень коротко, как кот, используя звуки: мур, мяу, мефк, хррррр, мррр, шшшш и т.д. Будь милым и забавным. Отвечай максимально кратко - 1-3 слова, только кошачьи звуки. Не объясняй ничего, не задавай вопросов."
+            },
+            {
+                "role": "user",
+                "content": message_text
+            }
+        ],
+        "max_tokens": 15,
+        "temperature": 0.8,
+        "top_p": 0.9
+    }
     
     try:
-        system_prompt = """Ты - бот в Telegram группе. Ты отвечаешь на сообщения, содержащие слово 'Путин'. 
-        Будь информативным, нейтральным и фактологичным в своих ответах. Отвечай кратко и по существу."""
+        response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=15)
+        response.raise_for_status()
         
-        completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=0.7,
-            max_tokens=150,
-            top_p=1
-        )
+        result = response.json()
+        return result['choices'][0]['message']['content'].strip()
         
-        return completion.choices[0].message.content
-        
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка сети при обращении к OpenRouter API: {e}")
+        return None
+    except KeyError as e:
+        print(f"Ошибка в формате ответа от API: {e}")
+        print(f"Полный ответ: {response.text}")
+        return None
     except Exception as e:
-        logger.error(f"Groq API error: {e}")
-        return "Не удалось сгенерировать ответ в данный момент."
+        print(f"Неожиданная ошибка: {e}")
+        return None
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle incoming messages and respond if they contain 'Путин'"""
-    
-    if not update.message or not update.message.text:
-        return
-    
-    message_text = update.message.text
-    
-    if 'путин' in message_text.lower():
-        try:
-            logger.info(f"Detected 'Путин' in message from chat {update.message.chat_id}")
-            response = generate_groq_response(message_text)
-            await update.message.reply_text(response)
-            
-        except Exception as e:
-            logger.error(f"Error processing message: {e}")
-            await update.message.reply_text("Извините, произошла ошибка при обработке сообщения.")
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle errors in the bot"""
-    logger.error(f"Exception while handling an update: {context.error}")
+    """Обработчик сообщений, который реагирует на слово 'Шмыг'"""
+    if update.message:
+        text = update.message.text
+        if text:
+            # Проверяем наличие слова "Шмыг" в любом регистре
+            if "шмыг" in text.lower():
+                # Получаем ответ от DeepSeek через OpenRouter
+                ai_response = await get_deepseek_response(f"Пользователь написал: '{text}'. Ответь как кот на слово 'шмыг'.")
+                
+                if ai_response:
+                    await update.message.reply_text(ai_response)
+                else:
+                    # Фолбэк ответы если API не работает
+                    fallback_responses = [
+                        "мефк! 🐾", 
+                        "хррррр...", 
+                        "мур-мур 😻", 
+                        "мяу!", 
+                        "шшшш!",
+                        "мрррр...",
+                        "*топчет лапками*",
+                        "*выгибает спинку*"
+                    ]
+                    import random
+                    await update.message.reply_text(random.choice(fallback_responses))
 
 def main():
-    """Start the bot"""
-    try:
-        # Create application
-        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-        
-        # Add message handler
-        application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND, 
-            handle_message
-        ))
-        
-        # Add error handler
-        application.add_error_handler(error_handler)
-        
-        # Start the bot
-        logger.info("Bot is starting...")
-        print("✅ Bot is running!")
-        
-        # Start polling
-        application.run_polling(
-            drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to start bot: {e}")
-        print(f"❌ Failed to start bot: {e}")
+    """Основная функция запуска бота"""
+    if not BOT_TOKEN:
+        print("Ошибка: Токен Telegram бота не установлен!")
+        print("Пожалуйста, установите переменную окружения BOT_TOKEN")
+        return
+    
+    if not OPENROUTER_API_KEY:
+        print("Ошибка: Токен DeepSeek API не установлен!")
+        print("Пожалуйста, установите переменную окружения DS_TOKEN")
+        return
+    
+    # Создаем приложение
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Добавляем обработчик сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Запускаем бота
+    print("Бот запущен и слушает сообщения с словом 'Шмыг'...")
+    print("Используется DeepSeek через OpenRouter API")
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
