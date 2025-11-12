@@ -20,7 +20,7 @@ def get_deepseek_response(message_text):
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com",
-        "X-Title": "Telegram Cat Bot"
+        "X-Title": "Telegram Fish Bot"
     }
     
     payload = {
@@ -28,14 +28,14 @@ def get_deepseek_response(message_text):
         "messages": [
             {
                 "role": "system",
-                "content": "Ты всратый сопящий кот. Отвечай очень коротко, как кот, используя звуки: мур, мяу, мефк, хррррр, мррр, шшшш и т.д. Будь милым и забавным. Отвечай максимально кратко - 1-3 слова."
+                "content": "Ты - говорящая рыбка в аквариуме. Ты видишь, что твой хозяин делает смешные и забавные вещи. Отвечай очень коротко, 1-2 предложения, в рыбьем стиле: используй слова бульк, плеск, пузыри. Расскажи что ты видела смешного, но кратко и мило."
             },
             {
                 "role": "user",
                 "content": message_text
             }
         ],
-        "max_tokens": 15,
+        "max_tokens": 50,
         "temperature": 0.8
     }
     
@@ -50,7 +50,7 @@ def get_deepseek_response(message_text):
 
 @app.route('/')
 def home():
-    return "Кот-бот работает! 🐱 Просто напиши 'Шмыг' в Telegram"
+    return "Рыбка-бот работает! 🐠 Просто напиши 'рыбка' в Telegram"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -64,19 +64,19 @@ def webhook():
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     """Обработчик сообщений"""
-    if message.text and "шмыг" in message.text.lower():
+    if message.text and "рыбка" in message.text.lower():
         ai_response = get_deepseek_response(message.text)
         if ai_response:
             bot.reply_to(message, ai_response)
         else:
             responses = [
-                "мефк! 🐾", 
-                "хррррр...", 
-                "мур-мур 😻", 
-                "мяу!", 
-                "шшшш!",
-                "мрррр...",
-                "*топчет лапками*"
+                "Бульк-бульк! Видела как ты танцевал с пылесосом! 🐠",
+                "Плеск! Ты разговаривал с кактусом, это было забавно! 💦",
+                "Пузыри... А ты вчера пел в душе как рок-звезда! 🫧",
+                "Бульк! Видела твою битву с дверью... победа за дверью! 🐟",
+                "Плеск-плеск! Ты искал очки, а они были на лбу! 🌊",
+                "Пузырьки смеха! Ты пытался поймать муху как лягушка! 🐠",
+                "Бульк... Наблюдала за твоим танцем с тостером! 🔥"
             ]
             bot.reply_to(message, random.choice(responses))
 
@@ -85,7 +85,9 @@ if __name__ == '__main__':
     bot.remove_webhook()
     
     # Устанавливаем вебхук
-    bot.set_webhook(url=f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')}/webhook")
+    render_hostname = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')
+    if render_hostname:
+        bot.set_webhook(url=f"https://{render_hostname}/webhook")
     
     # Запускаем Flask
     port = int(os.environ.get('PORT', 10000))
