@@ -1,3 +1,2 @@
 python-telegram-bot==20.7
-groq==0.6.0
-httpx<0.28.0
+requests==2.31.0
